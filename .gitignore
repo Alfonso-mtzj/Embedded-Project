@@ -1,0 +1,23 @@
+# CCS / Eclipse
+.metadata/
+Debug/
+Release/
+*/Debug/
+*/Release/
+*.launch
+.settings/
+.project
+.cproject
+
+# TI build artifacts (common)
+*.out
+*.map
+*.obj
+*.d
+*.i
+*.asm
+*.lst
+
+# OS junk
+.DS_Store
+Thumbs.db
