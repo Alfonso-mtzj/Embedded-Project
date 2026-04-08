@@ -22,9 +22,13 @@ Tic‑Tac‑Toe on the **MSP430FR6989** (Code Composer Studio) controlled by the
 - **Buzzer:** move/error/win/tie tones  
 
 ## Code Organization (high-level)
-- `main.c`: init + main loop/state machine
-- `game.c/.h`: board state, moves, win/tie checks
-- `ai.c/.h`: computer move selection (simple strategy)
-- `display.c/.h`: draw board/cursor/status
-- `input.c/.h`: joystick reading + debouncing
-- `buzzer.c/.h`: tones/melodies
+- `src/main.c`: init + main loop / top-level state machine
+- `src/app/`: dual-game + mode manager (PvP/PvC, Game A/B switching)
+- `src/game/`: tic‑tac‑toe rules (board, moves, win/tie) + AI (hardware-free)
+- `src/drivers/`: hardware drivers (joystick, pixel display, buzzer)
+- `src/ui/`: rendering (draw board/cursor/status using the display driver)
+- `src/audio/`: sound effects (move/error/win/tie/switch patterns)
+- `src/utils/`: helpers (debounce, timing, small utilities)
+- `docs/`: wiring, pinout, control mapping
+- `test/`: optional tests for `src/game/`
+- `tools/`: optional scripts/helpers
