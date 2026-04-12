@@ -1,0 +1,683 @@
+#ifndef TICTACTOE_H
+#define TICTACTOE_H
+
+#include <msp430.h>
+#include <stdint.h>
+
+// ============================================================
+//  Board Layout on 128x128 LCD
+//  The 3x3 grid is drawn centered on screen.
+//  Each cell is CELL_SIZE x CELL_SIZE pixels.
+//  Grid lines are LINE_THICK pixels wide.
+// ============================================================
+#define CELL_SIZE       38          // pixels per cell
+#define LINE_THICK      2           // grid line thickness
+#define GRID_OFFSET_X   7           // left margin before grid
+#define GRID_OFFSET_Y   20          // top margin (leaves room for status bar)
+#define GRID_TOTAL      (CELL_SIZE * 3 + LINE_THICK * 2)  // ~118 px wide
+
+// ============================================================
+//  Colors (RGB565 format used by Crystalfontz 128x128 LCD)
+// ============================================================
+#define COLOR_BLACK     0x0000
+#define COLOR_WHITE     0xFFFF
+#define COLOR_RED       0xF800
+#define COLOR_BLUE      0x001F
+#define COLOR_GREEN     0x07E0
+#define COLOR_YELLOW    0xFFE0
+#define COLOR_GRAY      0x8410
+#define COLOR_DGRAY     0x4208
+#define COLOR_CYAN      0x07FF
+#define COLOR_ORANGE    0xFD20
+#define COLOR_BG        0x0000      // background: black
+#define COLOR_GRID      0x39E7      // grid lines: mid-gray
+#define COLOR_CURSOR    0xFFE0      // cursor highlight: yellow
+#define COLOR_X         0xF800      // X pieces: red
+#define COLOR_O         0x001F      // O pieces: blue
+#define COLOR_WIN_LINE  0x07E0      // winning line: green
+
+// ============================================================
+//  Game state definitions
+// ============================================================
+#define PLAYER_NONE     0
+#define PLAYER_X        1
+#define PLAYER_O        2
+
+#define MODE_PVP        0           // player vs player
+#define MODE_PVC        1           // player vs computer
+
+#define GAME_A          0
+#define GAME_B          1
+
+#define STATE_MENU      0
+#define STATE_PLAYING   1
+#define STATE_GAMEOVER  2
+
+// ============================================================
+//  Joystick ADC thresholds (12-bit ADC, center ~2048)
+// ============================================================
+#define JOY_LOW         800
+#define JOY_HIGH        3200
+#define JOY_CENTER_LOW  1400
+#define JOY_CENTER_HIGH 2700
+
+// Joystick pins
+// X-axis: A2  on P6.1  (J1.2)
+// Y-axis: A14 on P6.1  -- actually check: J3.26 = P4.2 = A9 on MSP430FR6989
+// SEL:    P4.1 (J1.5)  -- digital input
+// NOTE: Exact port/channel depends on which MSP430 variant you're using.
+// The #defines below assume MSP430FR6989 + FR5994. Adjust if needed.
+#define JOY_X_CHANNEL   ADC12INCH_10    // A10 per your lab manual
+// Y channel: from pinout J3.26 -- you'll need to verify the analog channel
+// Lab manual snippet showed X=A10/P9.2 and Y is one pin over.
+// Placeholder: A11 — update with your lab manual's answer
+#define JOY_Y_CHANNEL   ADC12INCH_11
+
+// ============================================================
+//  Buzzer (J4.40) — driven by Timer PWM
+//  Adjust TB0/TA0 and pin depending on your MSP430 variant
+// ============================================================
+#define BUZZER_FREQ_MOVE    800     // Hz — short beep on move
+#define BUZZER_FREQ_WIN     1200    // Hz — win jingle base
+#define BUZZER_FREQ_LOSE    400     // Hz — loss/draw tone
+#define BUZZER_FREQ_SWITCH  600     // Hz — game switch beep
+
+// ============================================================
+//  LCD SPI pins (from datasheet):
+//  SPI CLK  → J1.7
+//  SPI CS   → J2.13
+//  SPI MOSI → J2.15
+//  LCD RST  → J4.17
+//  LCD D/C  → J4.31
+// ============================================================
+
+// ============================================================
+//  Data structures
+// ============================================================
+
+typedef struct {
+    uint8_t board[3][3];    // PLAYER_NONE / PLAYER_X / PLAYER_O
+    uint8_t current_player; // whose turn
+    uint8_t mode;           // MODE_PVP or MODE_PVC
+    uint8_t state;          // STATE_PLAYING / STATE_GAMEOVER
+    uint8_t winner;         // PLAYER_NONE if draw/ongoing
+    uint8_t cursor_row;     // joystick cursor position
+    uint8_t cursor_col;
+    // Winning line info for drawing the strike-through
+    int8_t  win_r0, win_c0, win_r1, win_c1;
+} Game;
+
+// ============================================================
+//  Function prototypes — grouped by file
+// ============================================================
+
+/* --- adc.c --- */
+void    ADC_Init(void);
+void    ADC_Read(uint16_t *x_out, uint16_t *y_out);
+
+/* --- joystick.c --- */
+typedef enum { JOY_NONE, JOY_UP, JOY_DOWN, JOY_LEFT, JOY_RIGHT, JOY_PRESS } JoyDir;
+JoyDir  Joystick_Read(void);
+
+/* --- buzzer.c --- */
+void    Buzzer_Init(void);
+void    Buzzer_Tone(uint16_t freq_hz, uint16_t duration_ms);
+void    Buzzer_Off(void);
+void    Buzzer_PlayMove(void);
+void    Buzzer_PlayWin(void);
+void    Buzzer_PlayDraw(void);
+void    Buzzer_PlaySwitch(void);
+
+/* --- lcd.c  (thin wrapper over your SPI LCD driver) --- */
+void    LCD_Init(void);
+void    LCD_FillRect(uint8_t x, uint8_t y, uint8_t w, uint8_t h, uint16_t color);
+void    LCD_DrawChar(uint8_t x, uint8_t y, char c, uint16_t fg, uint16_t bg);
+void    LCD_DrawString(uint8_t x, uint8_t y, const char *s, uint16_t fg, uint16_t bg);
+void    LCD_DrawLine(uint8_t x0, uint8_t y0, uint8_t x1, uint8_t y1, uint16_t color);
+
+/* --- game.c --- */
+void    Game_Init(Game *g, uint8_t mode);
+int     Game_MakeMove(Game *g, uint8_t row, uint8_t col);
+uint8_t Game_CheckWinner(Game *g);
+int     Game_IsBoardFull(Game *g);
+void    Game_ComputerMove(Game *g);   // simple minimax AI
+
+/* --- display.c --- */
+void    Display_DrawGrid(void);
+void    Display_DrawBoard(const Game *g, uint8_t active_game);
+void    Display_DrawCursor(uint8_t row, uint8_t col, uint8_t visible);
+void    Display_DrawPiece(uint8_t row, uint8_t col, uint8_t player);
+void    Display_DrawWinLine(const Game *g);
+void    Display_StatusBar(uint8_t active_game, uint8_t current_player);
+void    Display_Menu(void);
+void    Display_GameOver(const Game *g, uint8_t active_game);
+
+/* --- main.c --- */
+void    delay_ms(uint16_t ms);
+
+#endif /* TICTACTOE_H */
+
+// display.c
+// All rendering logic for the 128x128 TFT LCD.
+// Calls only LCD_* functions from lcd.c — no direct hardware access.
+//
+// Layout:
+//   Row 0–18:  status bar (active game + whose turn)
+//   Row 19:    1px separator line
+//   Row 20–117: 3x3 grid (3 × 38px cells + 2 × 2px grid lines = 118px)
+//   Row 118–127: result / hint area
+
+#include "tictactoe.h"
+#include <string.h>   // for sprintf if available; else use manual itoa
+
+// Helper: compute pixel X of cell column's left edge
+static uint8_t cell_x(uint8_t col) {
+    return GRID_OFFSET_X + col * (CELL_SIZE + LINE_THICK);
+}
+
+// Helper: compute pixel Y of cell row's top edge
+static uint8_t cell_y(uint8_t row) {
+    return GRID_OFFSET_Y + row * (CELL_SIZE + LINE_THICK);
+}
+
+// ============================================================
+//  Draw the static 3x3 grid lines
+// ============================================================
+void Display_DrawGrid(void) {
+    // Clear board area
+    LCD_FillRect(0, GRID_OFFSET_Y, 128, GRID_TOTAL + 2, COLOR_BG);
+
+    // Vertical grid lines (2 lines)
+    uint8_t v1_x = GRID_OFFSET_X + CELL_SIZE;
+    uint8_t v2_x = v1_x + LINE_THICK + CELL_SIZE;
+    uint8_t grid_top  = GRID_OFFSET_Y;
+    uint8_t grid_bot  = GRID_OFFSET_Y + CELL_SIZE * 3 + LINE_THICK * 2;
+
+    LCD_FillRect(v1_x, grid_top, LINE_THICK, grid_bot - grid_top, COLOR_GRID);
+    LCD_FillRect(v2_x, grid_top, LINE_THICK, grid_bot - grid_top, COLOR_GRID);
+
+    // Horizontal grid lines (2 lines)
+    uint8_t h1_y = GRID_OFFSET_Y + CELL_SIZE;
+    uint8_t h2_y = h1_y + LINE_THICK + CELL_SIZE;
+
+    LCD_FillRect(GRID_OFFSET_X, h1_y, CELL_SIZE * 3 + LINE_THICK * 2, LINE_THICK, COLOR_GRID);
+    LCD_FillRect(GRID_OFFSET_X, h2_y, CELL_SIZE * 3 + LINE_THICK * 2, LINE_THICK, COLOR_GRID);
+}
+
+// ============================================================
+//  Draw an X piece in the given cell
+// ============================================================
+static void Draw_X(uint8_t row, uint8_t col) {
+    uint8_t x = cell_x(col) + 5;
+    uint8_t y = cell_y(row) + 5;
+    uint8_t sz = CELL_SIZE - 10;   // inner size with padding
+
+    // Draw two diagonal lines, 3px thick
+    uint8_t i;
+    for (i = 0; i < 3; i++) {
+        LCD_DrawLine(x + i, y,     x + sz + i, y + sz,     COLOR_X);
+        LCD_DrawLine(x + i, y + sz, x + sz + i, y,         COLOR_X);
+    }
+}
+
+// ============================================================
+//  Draw an O piece (filled ring) in the given cell
+// ============================================================
+static void Draw_O(uint8_t row, uint8_t col) {
+    uint8_t cx = cell_x(col) + CELL_SIZE / 2;
+    uint8_t cy = cell_y(row) + CELL_SIZE / 2;
+    uint8_t r_outer = CELL_SIZE / 2 - 5;
+    uint8_t r_inner = r_outer - 4;
+
+    // Draw concentric circles as horizontal spans (avoids float math)
+    int8_t dy, dx;
+    for (dy = -(int8_t)r_outer; dy <= (int8_t)r_outer; dy++) {
+        for (dx = -(int8_t)r_outer; dx <= (int8_t)r_outer; dx++) {
+            int dist2 = (int)dx*dx + (int)dy*dy;
+            if (dist2 <= (int)r_outer*(int)r_outer &&
+                dist2 >= (int)r_inner*(int)r_inner) {
+                LCD_FillRect(cx + dx, cy + dy, 1, 1, COLOR_O);
+            }
+        }
+    }
+}
+
+// ============================================================
+//  Draw a single cell's piece (or clear it)
+// ============================================================
+void Display_DrawPiece(uint8_t row, uint8_t col, uint8_t player) {
+    // First clear the cell
+    LCD_FillRect(cell_x(col), cell_y(row), CELL_SIZE, CELL_SIZE, COLOR_BG);
+
+    if (player == PLAYER_X) Draw_X(row, col);
+    else if (player == PLAYER_O) Draw_O(row, col);
+}
+
+// ============================================================
+//  Draw cursor highlight (border around a cell)
+// ============================================================
+void Display_DrawCursor(uint8_t row, uint8_t col, uint8_t visible) {
+    uint16_t color = visible ? COLOR_CURSOR : COLOR_BG;
+    uint8_t  x = cell_x(col);
+    uint8_t  y = cell_y(row);
+
+    // Top and bottom edge
+    LCD_FillRect(x, y,               CELL_SIZE, 2, color);
+    LCD_FillRect(x, y + CELL_SIZE - 2, CELL_SIZE, 2, color);
+    // Left and right edge
+    LCD_FillRect(x,               y, 2, CELL_SIZE, color);
+    LCD_FillRect(x + CELL_SIZE - 2, y, 2, CELL_SIZE, color);
+}
+
+// ============================================================
+//  Draw the full board (grid + all pieces + cursor)
+// ============================================================
+void Display_DrawBoard(const Game *g, uint8_t active_game) {
+    uint8_t r, c;
+    Display_DrawGrid();
+    for (r = 0; r < 3; r++)
+        for (c = 0; c < 3; c++)
+            Display_DrawPiece(r, c, g->board[r][c]);
+
+    if (g->state == STATE_PLAYING) {
+        Display_DrawCursor(g->cursor_row, g->cursor_col, 1);
+    }
+    Display_StatusBar(active_game, g->current_player);
+}
+
+// ============================================================
+//  Draw the winning strike-through line
+// ============================================================
+void Display_DrawWinLine(const Game *g) {
+    if (g->win_r0 < 0) return;
+
+    // Center of start cell
+    uint8_t x0 = cell_x(g->win_c0) + CELL_SIZE / 2;
+    uint8_t y0 = cell_y(g->win_r0) + CELL_SIZE / 2;
+    // Center of end cell
+    uint8_t x1 = cell_x(g->win_c1) + CELL_SIZE / 2;
+    uint8_t y1 = cell_y(g->win_r1) + CELL_SIZE / 2;
+
+    // Draw 3 parallel lines for thickness
+    LCD_DrawLine(x0,   y0,   x1,   y1,   COLOR_WIN_LINE);
+    LCD_DrawLine(x0+1, y0+1, x1+1, y1+1, COLOR_WIN_LINE);
+    LCD_DrawLine(x0-1, y0-1, x1-1, y1-1, COLOR_WIN_LINE);
+}
+
+// ============================================================
+//  Status bar at the top (rows 0–18)
+// ============================================================
+void Display_StatusBar(uint8_t active_game, uint8_t current_player) {
+    LCD_FillRect(0, 0, 128, 19, COLOR_DGRAY);
+
+    // Game indicator: "A" or "B"
+    LCD_DrawChar(2, 6, active_game == GAME_A ? 'A' : 'B', COLOR_YELLOW, COLOR_DGRAY);
+    LCD_DrawChar(10, 6, ':', COLOR_GRAY, COLOR_DGRAY);
+
+    // Turn indicator
+    if (current_player == PLAYER_X) {
+        LCD_DrawString(14, 6, "X turn", COLOR_X, COLOR_DGRAY);
+    } else {
+        LCD_DrawString(14, 6, "O turn", COLOR_O, COLOR_DGRAY);
+    }
+
+    // Hint: "SEL=S  B1=swap"
+    LCD_DrawString(70, 6, "B1=swap", COLOR_GRAY, COLOR_DGRAY);
+}
+
+// ============================================================
+//  Game over screen (overlay below grid)
+// ============================================================
+void Display_GameOver(const Game *g, uint8_t active_game) {
+    Display_DrawWinLine(g);
+
+    // Result text in bottom strip (rows 119-127)
+    LCD_FillRect(0, 119, 128, 9, COLOR_DGRAY);
+
+    if (g->winner == PLAYER_X)
+        LCD_DrawString(20, 120, "X WINS!", COLOR_X, COLOR_DGRAY);
+    else if (g->winner == PLAYER_O)
+        LCD_DrawString(20, 120, "O WINS!", COLOR_O, COLOR_DGRAY);
+    else
+        LCD_DrawString(20, 120, "DRAW!  ", COLOR_YELLOW, COLOR_DGRAY);
+}
+
+// ============================================================
+//  Mode selection menu (shown at startup)
+// ============================================================
+void Display_Menu(void) {
+    LCD_FillRect(0, 0, 128, 128, COLOR_BG);
+
+    LCD_DrawString(14, 10, "TIC-TAC-TOE", COLOR_YELLOW, COLOR_BG);
+    LCD_DrawString(10, 30, "Select Mode:", COLOR_WHITE, COLOR_BG);
+
+    LCD_DrawString(10, 50, "UP:   1-Player", COLOR_CYAN, COLOR_BG);
+    LCD_DrawString(10, 65, "DOWN: 2-Player", COLOR_CYAN, COLOR_BG);
+
+    LCD_DrawString(8,  90, "SEL = confirm", COLOR_GRAY, COLOR_BG);
+    LCD_DrawString(4, 105, "B1 = new game", COLOR_GRAY, COLOR_BG);
+}
+
+// game.c
+// Pure game logic — no hardware dependencies.
+// All hardware calls are in display.c, buzzer.c, joystick.c.
+
+#include "tictactoe.h"
+
+// ============================================================
+//  Initialization
+// ============================================================
+void Game_Init(Game *g, uint8_t mode) {
+    uint8_t r, c;
+    for (r = 0; r < 3; r++)
+        for (c = 0; c < 3; c++)
+            g->board[r][c] = PLAYER_NONE;
+
+    g->current_player = PLAYER_X;   // X always goes first
+    g->mode           = mode;
+    g->state          = STATE_PLAYING;
+    g->winner         = PLAYER_NONE;
+    g->cursor_row     = 1;          // start cursor in center cell
+    g->cursor_col     = 1;
+    g->win_r0 = g->win_c0 = g->win_r1 = g->win_c1 = -1;
+}
+
+// ============================================================
+//  Make a move at (row, col).
+//  Returns 1 on success, 0 if cell already occupied or game over.
+// ============================================================
+int Game_MakeMove(Game *g, uint8_t row, uint8_t col) {
+    if (g->state != STATE_PLAYING)          return 0;
+    if (g->board[row][col] != PLAYER_NONE)  return 0;
+
+    g->board[row][col] = g->current_player;
+
+    // Check result
+    uint8_t winner = Game_CheckWinner(g);
+    if (winner != PLAYER_NONE) {
+        g->winner = winner;
+        g->state  = STATE_GAMEOVER;
+    } else if (Game_IsBoardFull(g)) {
+        g->winner = PLAYER_NONE;
+        g->state  = STATE_GAMEOVER;
+    } else {
+        // Swap turn
+        g->current_player = (g->current_player == PLAYER_X) ? PLAYER_O : PLAYER_X;
+    }
+    return 1;
+}
+
+// ============================================================
+//  Check for a winner. Also records win_r0/c0/r1/c1 for the
+//  strike-through line. Returns PLAYER_X, PLAYER_O, or PLAYER_NONE.
+// ============================================================
+uint8_t Game_CheckWinner(Game *g) {
+    uint8_t r, c;
+
+    // Rows
+    for (r = 0; r < 3; r++) {
+        if (g->board[r][0] != PLAYER_NONE &&
+            g->board[r][0] == g->board[r][1] &&
+            g->board[r][1] == g->board[r][2]) {
+            g->win_r0 = r; g->win_c0 = 0;
+            g->win_r1 = r; g->win_c1 = 2;
+            return g->board[r][0];
+        }
+    }
+    // Columns
+    for (c = 0; c < 3; c++) {
+        if (g->board[0][c] != PLAYER_NONE &&
+            g->board[0][c] == g->board[1][c] &&
+            g->board[1][c] == g->board[2][c]) {
+            g->win_r0 = 0; g->win_c0 = c;
+            g->win_r1 = 2; g->win_c1 = c;
+            return g->board[0][c];
+        }
+    }
+    // Diagonal top-left → bottom-right
+    if (g->board[0][0] != PLAYER_NONE &&
+        g->board[0][0] == g->board[1][1] &&
+        g->board[1][1] == g->board[2][2]) {
+        g->win_r0 = 0; g->win_c0 = 0;
+        g->win_r1 = 2; g->win_c1 = 2;
+        return g->board[0][0];
+    }
+    // Diagonal top-right → bottom-left
+    if (g->board[0][2] != PLAYER_NONE &&
+        g->board[0][2] == g->board[1][1] &&
+        g->board[1][1] == g->board[2][0]) {
+        g->win_r0 = 0; g->win_c0 = 2;
+        g->win_r1 = 2; g->win_c1 = 0;
+        return g->board[0][2];
+    }
+    return PLAYER_NONE;
+}
+
+int Game_IsBoardFull(Game *g) {
+    uint8_t r, c;
+    for (r = 0; r < 3; r++)
+        for (c = 0; c < 3; c++)
+            if (g->board[r][c] == PLAYER_NONE) return 0;
+    return 1;
+}
+
+// ============================================================
+//  Minimax AI (computer always plays as PLAYER_O)
+// ============================================================
+
+// Internal minimax evaluation
+static int minimax(uint8_t board[3][3], uint8_t is_maximizing) {
+    uint8_t r, c;
+    // Check terminal states
+    // (inline win check to avoid modifying g)
+    // Rows
+    for (r = 0; r < 3; r++) {
+        if (board[r][0] != PLAYER_NONE &&
+            board[r][0] == board[r][1] && board[r][1] == board[r][2]) {
+            return (board[r][0] == PLAYER_O) ? +10 : -10;
+        }
+    }
+    // Cols
+    for (c = 0; c < 3; c++) {
+        if (board[0][c] != PLAYER_NONE &&
+            board[0][c] == board[1][c] && board[1][c] == board[2][c]) {
+            return (board[0][c] == PLAYER_O) ? +10 : -10;
+        }
+    }
+    // Diag
+    if (board[0][0] != PLAYER_NONE &&
+        board[0][0] == board[1][1] && board[1][1] == board[2][2])
+        return (board[0][0] == PLAYER_O) ? +10 : -10;
+    if (board[0][2] != PLAYER_NONE &&
+        board[0][2] == board[1][1] && board[1][1] == board[2][0])
+        return (board[0][2] == PLAYER_O) ? +10 : -10;
+
+    // Check full
+    uint8_t full = 1;
+    for (r = 0; r < 3; r++)
+        for (c = 0; c < 3; c++)
+            if (board[r][c] == PLAYER_NONE) { full = 0; break; }
+    if (full) return 0;
+
+    int best, val;
+    if (is_maximizing) {
+        // Computer's turn (O, maximizing)
+        best = -100;
+        for (r = 0; r < 3; r++) {
+            for (c = 0; c < 3; c++) {
+                if (board[r][c] == PLAYER_NONE) {
+                    board[r][c] = PLAYER_O;
+                    val = minimax(board, 0);
+                    board[r][c] = PLAYER_NONE;
+                    if (val > best) best = val;
+                }
+            }
+        }
+        return best;
+    } else {
+        // Human's turn (X, minimizing)
+        best = +100;
+        for (r = 0; r < 3; r++) {
+            for (c = 0; c < 3; c++) {
+                if (board[r][c] == PLAYER_NONE) {
+                    board[r][c] = PLAYER_X;
+                    val = minimax(board, 1);
+                    board[r][c] = PLAYER_NONE;
+                    if (val < best) best = val;
+                }
+            }
+        }
+        return best;
+    }
+}
+
+// Pick the best move for PLAYER_O
+void Game_ComputerMove(Game *g) {
+    if (g->state != STATE_PLAYING) return;
+
+    uint8_t r, c;
+    int     best_val = -100;
+    uint8_t best_r   = 0, best_c = 0;
+    uint8_t found    = 0;
+
+    // Copy board for minimax
+    uint8_t board[3][3];
+    for (r = 0; r < 3; r++)
+        for (c = 0; c < 3; c++)
+            board[r][c] = g->board[r][c];
+
+    for (r = 0; r < 3; r++) {
+        for (c = 0; c < 3; c++) {
+            if (board[r][c] == PLAYER_NONE) {
+                board[r][c] = PLAYER_O;
+                int val = minimax(board, 0);
+                board[r][c] = PLAYER_NONE;
+                if (!found || val > best_val) {
+                    best_val = val;
+                    best_r   = r;
+                    best_c   = c;
+                    found    = 1;
+                }
+            }
+        }
+    }
+
+    if (found) {
+        Game_MakeMove(g, best_r, best_c);
+    }
+}
+
+// lcd.c
+// Thin wrapper around whatever SPI LCD driver you get from your lab.
+// The game code calls only these functions — so if your driver has
+// different function names, just change the bodies here, not the game logic.
+//
+// The Crystalfontz CFAF128128B uses the ST7735S controller.
+// Your lab likely provides an LCD driver (LcdDriver/) with at least:
+//   - Graphics_fillRectangle()
+//   - Graphics_drawLine()
+//   - Crystalfontz128x128_Init()
+// etc. via TI's GrLib / MSP Graphics Library.
+//
+// REPLACE the placeholder bodies below with your actual driver calls.
+
+#include "tictactoe.h"
+
+// ---- Tiny 5x7 font table (ASCII 32–127) ----
+// Each character is 5 bytes wide, 7 bits tall.
+// Bit 7 of each byte = top pixel.
+// Only a subset shown here; extend as needed.
+static const uint8_t font5x7[][5] = {
+    {0x00,0x00,0x00,0x00,0x00}, // ' '
+    {0x00,0x00,0x5F,0x00,0x00}, // '!'
+    {0x00,0x07,0x00,0x07,0x00}, // '"'
+    // ... (trimmed for brevity; use a full font table in your project)
+    // Digits 0-9 start at index ('0' - ' ') = 16
+};
+
+// ============================================================
+//  Replace these with your actual LCD driver calls
+// ============================================================
+
+// Forward declare your SPI driver functions (from LcdDriver/):
+// extern void Crystalfontz128x128_Init(void);
+// extern void Graphics_fillRectangle(Graphics_Context *ctx, const Graphics_Rectangle *rect);
+// etc.
+// For now these are bare-metal ST7735S writes — replace with your driver.
+
+// Placeholder: write a pixel directly. Replace with your driver's pixel write.
+static void LCD_WritePixel(uint8_t x, uint8_t y, uint16_t color) {
+    // TODO: call your SPI driver's pixel-write function here.
+    // e.g.: Crystalfontz128x128_SetPixel(&g_sContext, x, y, color);
+    (void)x; (void)y; (void)color;
+}
+
+void LCD_Init(void) {
+    // TODO: call your SPI LCD init function.
+    // e.g.: Crystalfontz128x128_Init();
+    //        Graphics_initContext(&g_sContext, &g_sCrystalfontz128x128);
+    //        Graphics_setForegroundColor(&g_sContext, GRAPHICS_COLOR_WHITE);
+    //        Graphics_setBackgroundColor(&g_sContext, GRAPHICS_COLOR_BLACK);
+
+    // Clear screen to black
+    LCD_FillRect(0, 0, 128, 128, COLOR_BG);
+}
+
+// Fill a rectangle with a solid color
+void LCD_FillRect(uint8_t x, uint8_t y, uint8_t w, uint8_t h, uint16_t color) {
+    uint8_t i, j;
+    for (j = y; j < y + h; j++) {
+        for (i = x; i < x + w; i++) {
+            LCD_WritePixel(i, j, color);
+        }
+    }
+    // TODO: Replace the loop above with a faster driver rectangle fill if available.
+    // e.g.: Graphics_Rectangle rect = {x, y, x+w-1, y+h-1};
+    //        Graphics_setForegroundColor(&g_sContext, color);
+    //        Graphics_fillRectangle(&g_sContext, &rect);
+}
+
+// Bresenham line
+void LCD_DrawLine(uint8_t x0, uint8_t y0, uint8_t x1, uint8_t y1, uint16_t color) {
+    int dx  =  (x1 > x0) ? (x1 - x0) : (x0 - x1);
+    int dy  = -((y1 > y0) ? (y1 - y0) : (y0 - y1));
+    int sx  = (x0 < x1) ? 1 : -1;
+    int sy  = (y0 < y1) ? 1 : -1;
+    int err = dx + dy;
+    int e2;
+    while (1) {
+        LCD_WritePixel(x0, y0, color);
+        if (x0 == x1 && y0 == y1) break;
+        e2 = 2 * err;
+        if (e2 >= dy) { err += dy; x0 += sx; }
+        if (e2 <= dx) { err += dx; y0 += sy; }
+    }
+}
+
+// Draw a single ASCII character using the 5x7 font
+// Each column byte: bit7 = top, bit0 = bottom
+void LCD_DrawChar(uint8_t x, uint8_t y, char c, uint16_t fg, uint16_t bg) {
+    uint8_t col, row;
+    int idx = (int)c - 32;
+    if (idx < 0 || idx >= (int)(sizeof(font5x7)/sizeof(font5x7[0]))) idx = 0;
+    for (col = 0; col < 5; col++) {
+        uint8_t col_data = font5x7[idx][col];
+        for (row = 0; row < 7; row++) {
+            LCD_WritePixel(x + col, y + row,
+                (col_data & (0x80 >> row)) ? fg : bg);
+        }
+    }
+    // 1-pixel spacer column
+    for (row = 0; row < 7; row++) {
+        LCD_WritePixel(x + 5, y + row, bg);
+    }
+}
+
+void LCD_DrawString(uint8_t x, uint8_t y, const char *s, uint16_t fg, uint16_t bg) {
+    while (*s) {
+        LCD_DrawChar(x, y, *s, fg, bg);
+        x += 6;   // 5 pixels + 1 spacer
+        s++;
+        if (x >= 122) break;  // don't overrun screen
+    }
+}
