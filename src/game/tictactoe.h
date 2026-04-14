@@ -1,4 +1,3 @@
-
 #ifndef TICTACTOE_H
 #define TICTACTOE_H
 
@@ -9,8 +8,8 @@ typedef enum { STATUS_IN_PROGRESS=0, STATUS_X_WINS, STATUS_O_WINS, STATUS_TIE } 
 
 typedef struct {
     Cell board[3][3];
-    Cell turn;          // CELL_X or CELL_O
-    GameStatus status;  // in progress / win / tie
+    Cell turn;
+    GameStatus status;
 } GameState;
 
 void TTT_Init(GameState* s);
