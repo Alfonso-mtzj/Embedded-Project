@@ -1,102 +1,95 @@
-
 #include "joystick.h"
 #include <msp430.h>
 
 /*
-FILL THIS IN:
-- Which ADC channels are joystick X and Y?
-- Which GPIO pin is SELECT button?
-- Optional: which GPIO pin is SWITCH GAME button?
-
-If you tell me the pins, I can replace all of this with the exact working ADC code.
+  BOOSTXL-EDUMKII joystick pins from your photo:
+    HOR(X): J1.2   (analog)
+    VER(Y): J3.26  (analog)
+    SEL:    J1.5   (digital)
+  BoosterPack B1 button is on the right side (J4.32/J4.33 area).
+  TODO: confirm port/bit mapping for SEL and B1 from your lab pin map.
 */
 
-// ---------- FILL IN THESE MACROS ----------
-#define JOY_X_ADC_CHANNEL   (0)  // TODO: set to correct ADC channel number
-#define JOY_Y_ADC_CHANNEL   (1)  // TODO: set to correct ADC channel number
+// ---------- TODO (PIN MAP): set these correctly ----------
+#define SEL_DIR   P4DIR
+#define SEL_REN   P4REN
+#define SEL_OUT   P4OUT
+#define SEL_IN    P4IN
+#define SEL_BIT   BIT1
 
-#define SELECT_PORT_DIR     P1DIR   // TODO
-#define SELECT_PORT_REN     P1REN   // TODO
-#define SELECT_PORT_OUT     P1OUT   // TODO
-#define SELECT_PORT_IN      P1IN    // TODO
-#define SELECT_PIN_MASK     BIT1    // TODO: pin mask
+#define B1_DIR    P3DIR
+#define B1_REN    P3REN
+#define B1_OUT    P3OUT
+#define B1_IN     P3IN
+#define B1_BIT    BIT0
+// --------------------------------------------------------
 
-// Optional separate button for switching games (recommended)
-#define SWITCH_PORT_DIR     P1DIR   // TODO
-#define SWITCH_PORT_REN     P1REN   // TODO
-#define SWITCH_PORT_OUT     P1OUT   // TODO
-#define SWITCH_PORT_IN      P1IN    // TODO
-#define SWITCH_PIN_MASK     BIT2    // TODO: pin mask (or set to 0 if unused)
-// ----------------------------------------
+#define JOY_LOW   800
+#define JOY_HIGH  3200
 
-// Thresholds for joystick direction from ADC reading.
-// These depend on your joystick + reference voltage.
-// Start with these and adjust by printing values or testing.
-#define ADC_CENTER_MIN  12000
-#define ADC_CENTER_MAX  20000
-#define ADC_LOW_THRESH   8000
-#define ADC_HIGH_THRESH 24000
-
-// Simple rate limit so holding the joystick doesn't move 100x per second.
-#define REPEAT_DELAY_TICKS  4000
+// TODO: confirm ADC12INCH values for FR6989 with EDUMKII wiring
+#define JOY_X_CHANNEL ADC12INCH_10
+#define JOY_Y_CHANNEL ADC12INCH_11
 
 static uint16_t cooldown = 0;
+#define COOLDOWN 2500
 
-static uint16_t adc_read_channel(uint8_t ch)
+static void adc_init(void)
 {
-    (void)ch;
-    // TODO: implement ADC read on MSP430FR6989 (ADC12_B).
-    // For now, return a fake "center" value so code compiles.
-    return 16000;
+    ADC12CTL0 &= ~ADC12ENC;
+    ADC12CTL0 = ADC12SHT0_2 | ADC12ON;
+    ADC12CTL1 = ADC12SHP;
+    ADC12CTL2 = ADC12RES_2;
+    ADC12CTL0 |= ADC12ENC;
+}
+
+static uint16_t adc_read(uint16_t inch)
+{
+    ADC12CTL0 &= ~ADC12ENC;
+    ADC12MCTL0 = inch;
+    ADC12CTL0 |= ADC12ENC;
+
+    ADC12CTL0 |= ADC12SC;
+    while (ADC12CTL1 & ADC12BUSY);
+    return ADC12MEM0;
 }
 
 void Joystick_Init(void)
 {
-    // TODO: ADC12_B setup (clock, sample/hold, enable)
-    // TODO: configure ADC input pins for X/Y
+    adc_init();
 
-    // Select button input pull-up
-    SELECT_PORT_DIR &= ~SELECT_PIN_MASK;
-    SELECT_PORT_REN |=  SELECT_PIN_MASK;
-    SELECT_PORT_OUT |=  SELECT_PIN_MASK; // pull-up
+    // SEL input pull-up
+    SEL_DIR &= ~SEL_BIT;
+    SEL_REN |=  SEL_BIT;
+    SEL_OUT |=  SEL_BIT;
 
-    // Switch button input pull-up (optional)
-    if (SWITCH_PIN_MASK != 0) {
-        SWITCH_PORT_DIR &= ~SWITCH_PIN_MASK;
-        SWITCH_PORT_REN |=  SWITCH_PIN_MASK;
-        SWITCH_PORT_OUT |=  SWITCH_PIN_MASK; // pull-up
-    }
+    // B1 input pull-up
+    B1_DIR &= ~B1_BIT;
+    B1_REN |=  B1_BIT;
+    B1_OUT |=  B1_BIT;
 }
 
 JoyAction Joystick_ReadAction(void)
 {
-    // cooldown timer to avoid too-fast repeats
-    if (cooldown > 0) {
-        cooldown--;
-        return JOY_NONE;
-    }
+    if (cooldown) { cooldown--; return JOY_NONE; }
 
-    // 1) buttons (active-low because of pull-up)
-    if ((SELECT_PORT_IN & SELECT_PIN_MASK) == 0) {
-        cooldown = REPEAT_DELAY_TICKS;
-        return JOY_SELECT;
-    }
-
-    if (SWITCH_PIN_MASK != 0 && ((SWITCH_PORT_IN & SWITCH_PIN_MASK) == 0)) {
-        cooldown = REPEAT_DELAY_TICKS;
+    if ((B1_IN & B1_BIT) == 0) {
+        cooldown = COOLDOWN;
         return JOY_SWITCH_GAME;
     }
 
-    // 2) analog joystick
-    uint16_t x = adc_read_channel(JOY_X_ADC_CHANNEL);
-    uint16_t y = adc_read_channel(JOY_Y_ADC_CHANNEL);
+    if ((SEL_IN & SEL_BIT) == 0) {
+        cooldown = COOLDOWN;
+        return JOY_SELECT;
+    }
 
-    // Interpret X/Y into directional actions
-    if (x < ADC_LOW_THRESH)  { cooldown = REPEAT_DELAY_TICKS; return JOY_LEFT;  }
-    if (x > ADC_HIGH_THRESH) { cooldown = REPEAT_DELAY_TICKS; return JOY_RIGHT; }
-    if (y < ADC_LOW_THRESH)  { cooldown = REPEAT_DELAY_TICKS; return JOY_DOWN;  }
-    if (y > ADC_HIGH_THRESH) { cooldown = REPEAT_DELAY_TICKS; return JOY_UP;    }
+    uint16_t x = adc_read(JOY_X_CHANNEL);
+    uint16_t y = adc_read(JOY_Y_CHANNEL);
 
-    // No action
+    if (x < JOY_LOW)  { cooldown = COOLDOWN; return JOY_LEFT; }
+    if (x > JOY_HIGH) { cooldown = COOLDOWN; return JOY_RIGHT; }
+    if (y < JOY_LOW)  { cooldown = COOLDOWN; return JOY_DOWN; }
+    if (y > JOY_HIGH) { cooldown = COOLDOWN; return JOY_UP; }
+
     return JOY_NONE;
 }
