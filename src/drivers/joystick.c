@@ -1,23 +1,6 @@
 #include "joystick.h"
 #include <msp430.h>
 
-/*
-  Final joystick driver (MSP430FR6989 + BOOSTXL-EDUMKII)
-  -----------------------------------------------------
-  Mappings confirmed from your friend's lab code:
-
-  X axis (HOR): J1.2 -> A10 / P9.2  -> ADC12INCH_10
-    Analog enable: P9SEL1|=BIT2; P9SEL0|=BIT2;
-
-  Y axis (VER): J3.26 -> A4 / P8.7  -> ADC12INCH_4
-    Analog enable: P8SEL1|=BIT7; P8SEL0|=BIT7;
-
-  Joystick press (SEL): J1.5 -> P3.2 (GPIO, active-low w/ pull-up)
-
-  NOTE: B1 swap button mapping is STILL not proven from what you pasted.
-  Your friend code references "booster_s2_init()" + But3 which looks like S2.
-  If your TA requires B1 swap, paste the booster button mapping section.
-*/
 
 // -------- SEL button (joystick press) ----------
 #define SEL_DIR   P3DIR
