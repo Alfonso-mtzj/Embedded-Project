@@ -11,7 +11,7 @@ static char turnA, turnB;
 static int curRowA, curColA;
 static int curRowB, curColB;
 
-volatile int activeBoard = 1;
+volatile int activeBoard  = 1;
 volatile int needsRedraw  = 1;
 volatile int exitToMenu   = 0;
 
@@ -75,6 +75,16 @@ static int handleResult(Graphics_Context *ctx, char board[3][3],
     return 0;
 }
 
+static void updateCursor(Graphics_Context *ctx, char board[3][3],
+                          int prevRow, int prevCol, int newRow, int newCol)
+{
+    clearCell(ctx, prevRow, prevCol);
+    redrawCellLines(ctx, prevRow, prevCol);
+    if(board[prevRow][prevCol] == PLAYER_X) drawX(ctx, prevRow, prevCol);
+    if(board[prevRow][prevCol] == PLAYER_O) drawO(ctx, prevRow, prevCol);
+    drawCursor(ctx, newRow, newCol);
+}
+
 void run_pvp(Graphics_Context *ctx)
 {
     char board[3][3];
@@ -92,14 +102,17 @@ void run_pvp(Graphics_Context *ctx)
     {
         if(needsRedraw)
         {
-            drawBoard(ctx); drawMarks(ctx, board);
-            drawCursor(ctx, row, col); showTurn(ctx, turn);
+            drawBoard(ctx);
+            drawMarks(ctx, board);
+            drawCursor(ctx, row, col);
+            showTurn(ctx, turn);
             needsRedraw = 0;
         }
 
         prevRow = row; prevCol = col;
         movecursor(&row, &col);
-        if(prevRow != row || prevCol != col) needsRedraw = 1;
+        if(prevRow != row || prevCol != col)
+            updateCursor(ctx, board, prevRow, prevCol, row, col);
 
         if(readJoystick() == SELECT)
         {
@@ -107,7 +120,6 @@ void run_pvp(Graphics_Context *ctx)
             {
                 board[row][col] = turn;
                 needsRedraw = 1;
-                drawBoard(ctx); drawMarks(ctx, board); showTurn(ctx, turn);
                 if(!handleResult(ctx, board, &row, &col, &turn))
                     turn = (turn == PLAYER_X) ? PLAYER_O : PLAYER_X;
             }
@@ -135,28 +147,29 @@ void run_pvc(Graphics_Context *ctx)
     {
         if(needsRedraw)
         {
-            drawBoard(ctx); drawMarks(ctx, board);
-            drawCursor(ctx, row, col); showTurn(ctx, turn);
+            drawBoard(ctx);
+            drawMarks(ctx, board);
+            drawCursor(ctx, row, col);
+            showTurn(ctx, turn);
             needsRedraw = 0;
         }
 
         prevRow = row; prevCol = col;
         movecursor(&row, &col);
-        if(prevRow != row || prevCol != col) needsRedraw = 1;
+        if(prevRow != row || prevCol != col)
+            updateCursor(ctx, board, prevRow, prevCol, row, col);
 
         if(readJoystick() == SELECT)
         {
             if(board[row][col] == EMPTY)
             {
                 board[row][col] = PLAYER_X;
-                drawBoard(ctx); drawMarks(ctx, board);
                 if(!handleResult(ctx, board, &row, &col, &turn))
                 {
                     for(r=0;r<3;r++) for(c=0;c<3;c++) gs.board[r][c] = board[r][c];
                     gs.currentPlayer = PLAYER_O;
                     ai_move(&gs);
                     for(r=0;r<3;r++) for(c=0;c<3;c++) board[r][c] = gs.board[r][c];
-                    drawBoard(ctx); drawMarks(ctx, board);
                     handleResult(ctx, board, &row, &col, &turn);
                 }
                 needsRedraw = 1;
@@ -176,48 +189,23 @@ void game_setup(void)
     exitToMenu  = 0;
 }
 
-void run_dual_pvp(Graphics_Context *ctx)
+static void drawDualScreen(Graphics_Context *ctx)
 {
-    int prevRow, prevCol;
-    game_setup();
+    // Select which board to show based on activeBoard
+    char (*board)[3] = (activeBoard == 1) ? boardA : boardB;
+    char   turn      = (activeBoard == 1) ? turnA  : turnB;
+    int    row       = (activeBoard == 1) ? curRowA : curRowB;
+    int    col       = (activeBoard == 1) ? curColA : curColB;
 
-    while(!exitToMenu)
-    {
-        char (*board)[3] = (activeBoard == 1) ? boardA : boardB;
-        char  *turn      = (activeBoard == 1) ? &turnA : &turnB;
-        int   *row       = (activeBoard == 1) ? &curRowA : &curRowB;
-        int   *col       = (activeBoard == 1) ? &curColA : &curColB;
-
-        if(needsRedraw)
-        {
-            drawBoard(ctx); drawMarks(ctx, board);
-            drawCursor(ctx, *row, *col);
-            showTurn(ctx, *turn);
-            showGameNumber(ctx, activeBoard);
-            needsRedraw = 0;
-        }
-
-        prevRow = *row; prevCol = *col;
-        movecursor(row, col);
-        if(*row != prevRow || *col != prevCol) needsRedraw = 1;
-
-        if(readJoystick() == SELECT)
-        {
-            if(board[*row][*col] == EMPTY)
-            {
-                board[*row][*col] = *turn;
-                drawBoard(ctx); drawMarks(ctx, board);
-                if(!handleResult(ctx, board, row, col, turn))
-                    *turn = (*turn == PLAYER_X) ? PLAYER_O : PLAYER_X;
-                needsRedraw = 1;
-            }
-            else buzzer_error();
-            checkBoosterS2Release();
-        }
-    }
+    drawBoard(ctx);
+    drawMarks(ctx, board);
+    drawCursor(ctx, row, col);
+    showGameNumber(ctx, activeBoard);
+    showTurn(ctx, turn);
+    needsRedraw = 0;
 }
 
-void run_dual_pvc(Graphics_Context *ctx)
+static void run_dual(Graphics_Context *ctx, int mode)
 {
     int prevRow, prevCol, r, c;
     GameState gs;
@@ -225,94 +213,45 @@ void run_dual_pvc(Graphics_Context *ctx)
 
     while(!exitToMenu)
     {
+        // needsRedraw is set by S1 interrupt OR after a move
+        if(needsRedraw)
+        {
+            drawDualScreen(ctx);
+        }
+
         char (*board)[3] = (activeBoard == 1) ? boardA : boardB;
         char  *turn      = (activeBoard == 1) ? &turnA : &turnB;
         int   *row       = (activeBoard == 1) ? &curRowA : &curRowB;
         int   *col       = (activeBoard == 1) ? &curColA : &curColB;
 
-        if(needsRedraw)
-        {
-            drawBoard(ctx); drawMarks(ctx, board);
-            drawCursor(ctx, *row, *col);
-            showTurn(ctx, *turn);
-            showGameNumber(ctx, activeBoard);
-            needsRedraw = 0;
-        }
-
         prevRow = *row; prevCol = *col;
         movecursor(row, col);
-        if(*row != prevRow || *col != prevCol) needsRedraw = 1;
+        if(*row != prevRow || *col != prevCol)
+            updateCursor(ctx, board, prevRow, prevCol, *row, *col);
 
         if(readJoystick() == SELECT)
         {
             if(board[*row][*col] == EMPTY)
             {
-                board[*row][*col] = PLAYER_X;
-                drawBoard(ctx); drawMarks(ctx, board);
-                if(!handleResult(ctx, board, row, col, turn))
+                int isPC = (mode == 1) || (mode == 2 && activeBoard == 1);
+
+                if(isPC)
                 {
-                    for(r=0;r<3;r++) for(c=0;c<3;c++) gs.board[r][c]=board[r][c];
-                    gs.currentPlayer = PLAYER_O;
-                    ai_move(&gs);
-                    for(r=0;r<3;r++) for(c=0;c<3;c++) board[r][c]=gs.board[r][c];
-                    drawBoard(ctx); drawMarks(ctx, board);
-                    handleResult(ctx, board, row, col, turn);
-                }
-                needsRedraw = 1;
-            }
-            else buzzer_error();
-            checkBoosterS2Release();
-        }
-    }
-}
-
-void run_dual_mixed(Graphics_Context *ctx)
-{
-    int prevRow, prevCol, r, c;
-    GameState gs;
-    game_setup();
-
-    while(!exitToMenu)
-    {
-        char (*board)[3] = (activeBoard == 1) ? boardA : boardB;
-        char  *turn      = (activeBoard == 1) ? &turnA : &turnB;
-        int   *row       = (activeBoard == 1) ? &curRowA : &curRowB;
-        int   *col       = (activeBoard == 1) ? &curColA : &curColB;
-
-        if(needsRedraw)
-        {
-            drawBoard(ctx); drawMarks(ctx, board);
-            drawCursor(ctx, *row, *col);
-            showTurn(ctx, *turn);
-            showGameNumber(ctx, activeBoard);
-            needsRedraw = 0;
-        }
-
-        prevRow = *row; prevCol = *col;
-        movecursor(row, col);
-        if(*row != prevRow || *col != prevCol) needsRedraw = 1;
-
-        if(readJoystick() == SELECT)
-        {
-            if(board[*row][*col] == EMPTY)
-            {
-                board[*row][*col] = *turn;
-                drawBoard(ctx); drawMarks(ctx, board);
-                if(!handleResult(ctx, board, row, col, turn))
-                {
-                    if(activeBoard == 1) // Game A is vs PC
+                    board[*row][*col] = PLAYER_X;
+                    if(!handleResult(ctx, board, row, col, turn))
                     {
                         for(r=0;r<3;r++) for(c=0;c<3;c++) gs.board[r][c]=board[r][c];
                         gs.currentPlayer = PLAYER_O;
                         ai_move(&gs);
                         for(r=0;r<3;r++) for(c=0;c<3;c++) board[r][c]=gs.board[r][c];
-                        drawBoard(ctx); drawMarks(ctx, board);
                         handleResult(ctx, board, row, col, turn);
                     }
-                    else // Game B is PvP
-                    {
+                }
+                else
+                {
+                    board[*row][*col] = *turn;
+                    if(!handleResult(ctx, board, row, col, turn))
                         *turn = (*turn == PLAYER_X) ? PLAYER_O : PLAYER_X;
-                    }
                 }
                 needsRedraw = 1;
             }
@@ -321,3 +260,7 @@ void run_dual_mixed(Graphics_Context *ctx)
         }
     }
 }
+
+void run_dual_pvp(Graphics_Context *ctx)   { run_dual(ctx, 0); }
+void run_dual_pvc(Graphics_Context *ctx)   { run_dual(ctx, 1); }
+void run_dual_mixed(Graphics_Context *ctx) { run_dual(ctx, 2); }
