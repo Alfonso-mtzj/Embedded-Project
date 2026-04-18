@@ -76,3 +76,4 @@ void HAL_LCD_writeData(uint8_t data)
     CS_LO;
     spi_send_byte(data);
 }
+
