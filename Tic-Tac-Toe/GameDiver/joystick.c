@@ -46,10 +46,10 @@ int readJoystick(void)
 void movecursor(int *row, int *col)
 {
     int dir = readJoystick();
-    if(dir == RIGHT && *col < 2) { buzzer_move(); (*col)++; __delay_cycles(400000); }
-    if(dir == LEFT  && *col > 0) { buzzer_move(); (*col)--; __delay_cycles(400000); }
-    if(dir == UP    && *row > 0) { buzzer_move(); (*row)--; __delay_cycles(400000); }
-    if(dir == DOWN  && *row < 2) { buzzer_move(); (*row)++; __delay_cycles(400000); }
+    if(dir == RIGHT && *col < 2) { buzzer_move(); (*col)++; __delay_cycles(300000); }
+    if(dir == LEFT  && *col > 0) { buzzer_move(); (*col)--; __delay_cycles(300000); }
+    if(dir == UP    && *row > 0) { buzzer_move(); (*row)--; __delay_cycles(300000); }
+    if(dir == DOWN  && *row < 2) { buzzer_move(); (*row)++; __delay_cycles(300000); }
 }
 
 void selectOptions(int *opt, int maxOpt)
