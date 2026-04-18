@@ -31,4 +31,7 @@ void clearCell(Graphics_Context *ctx, int r, int c);
 void showTurn(Graphics_Context *ctx, char player);
 void showGameNumber(Graphics_Context *ctx, int num);
 
+void redrawCellLines(Graphics_Context *ctx, int r, int c);
+
 #endif
+
