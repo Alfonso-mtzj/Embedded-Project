@@ -1,34 +1,105 @@
-# Embedded-Project
+# Embedded Project — Dual Tic‑Tac‑Toe (MSP430FR6989 + BOOSTXL‑EDUMKII)
 
-# Dual Tic‑Tac‑Toe (MSP430FR6989 / CCS)
+This repo contains a simple embedded C application that runs a Tic‑Tac‑Toe game on the **Educational BoosterPack MKII (BOOSTXL‑EDUMKII)** connected to the **MSP‑EXP430FR6989 LaunchPad**.
 
-## Summary
-Tic‑Tac‑Toe on the **MSP430FR6989** (Code Composer Studio) controlled by the **joystick** and displayed on the **pixel display**. Uses the **buzzer** for feedback. Supports **PvP**, **PvC**, and **two games at once** (Game A and Game B) with switching mid‑game.
+The design is intentionally modular (drivers → game logic → UI → app state machine) so it’s easy to build, debug, and explain.
+
+---
 
 ## Features
-- **Modes:** Player vs Player, Player vs Computer  
-- **Dual-game:** Two independent boards (A/B); switch anytime without losing progress  
-- **Audio:** beep on move, error tone on invalid move, win/tie sound  
+- Tic‑Tac‑Toe game logic (win/tie detection)
+- PvP and PvC mode (computer AI chooses moves)
+- Joystick controls for cursor movement + select
+- Buzzer sound effects (move / win / tie / error)
+- 128×128 TFT display rendering (grid, pieces, cursor)
 
-## Controls (typical mapping)
-- Joystick **Up/Down/Left/Right:** move cursor
-- **Select** (joystick press or button): place X/O
-- **Switch Game** (button or long-press): toggle Game A ↔ Game B
-- **Reset** (optional button/menu): restart current game
+---
 
-## Components Used
-- **Joystick:** navigation + selection + switching games  
-- **Pixel display:** board, cursor, status (game A/B, turn, win/tie)  
-- **Buzzer:** move/error/win/tie tones  
+## Folder Structure (High Level)
+- `src/main.c`  
+  Entry point. Initializes hardware and runs the main loop.
 
-## Code Organization (high-level)
-- `src/main.c`: init + main loop / top-level state machine
-- `src/app/`: dual-game + mode manager (PvP/PvC, Game A/B switching)
-- `src/game/`: tic‑tac‑toe rules (board, moves, win/tie) + AI (hardware-free)
-- `src/drivers/`: hardware drivers (joystick, pixel display, buzzer)
-- `src/ui/`: rendering (draw board/cursor/status using the display driver)
-- `src/audio/`: sound effects (move/error/win/tie/switch patterns)
-- `src/utils/`: helpers (debounce, timing, small utilities)
-- `docs/`: wiring, pinout, control mapping
-- `test/`: optional tests for `src/game/`
-- `tools/`: optional scripts/helpers
+- `src/app/`  
+  **Application state machine** (`game_manager.c`) — handles menu vs playing, reads joystick actions, triggers sound, calls rendering.
+
+- `src/drivers/`  
+  **Hardware drivers** (no game logic):
+  - `display.c/.h` — TFT driver exposing `Display_*` drawing primitives  
+  - `joystick.c/.h` — ADC joystick + SEL button → returns `JoyAction`
+  - `buzzer.c/.h` — buzzer output (tone/beep support)
+
+- `src/game/`  
+  **Pure game logic** (no hardware):
+  - `tictactoe.c/.h` — board state, apply move, check win/tie
+  - `ai.c/.h` — computer move selection
+
+- `src/ui/`  
+  **Rendering only**:
+  - `render.c/.h` — draws grid/pieces/cursor using `Display_*`
+
+- `src/audio/`  
+  **Sound effects patterns**:
+  - `sfx.c/.h` — “move”, “win”, “tie”, “error”, “switch” sounds
+
+---
+
+## Control Mapping (BoosterPack)
+- **Joystick X/Y**: analog inputs (ADC)  
+- **Joystick SEL (press)**: digital input (active‑low pull‑up)
+- **Buzzer**: BoosterPack buzzer output pin
+- **TFT**: driven via SPI
+
+> Note: Exact MCU pin mapping depends on the lab pin map and is configured inside the driver files in `src/drivers/`.
+
+---
+
+## Build & Run (Code Composer Studio)
+1. Open **CCS**.
+2. Import the project:
+   - `File → Import… → Code Composer Studio → CCS Projects`
+   - Select the repo/project directory.
+3. Build:
+   - `Project → Clean`
+   - `Project → Build`
+4. Flash and run:
+   - Click **Debug**
+   - Click **Resume** (green play)
+
+---
+
+## Quick Hardware Test Plan (Recommended)
+### Test 1 — Display
+Temporarily add this after `Display_Init()` in `src/main.c`:
+```c
+Display_FillRect(0, 0, 128, 128, 0xF800); // solid red
+while (1);
+```
+If the screen turns red, your TFT driver + wiring are correct.
+
+### Test 2 — Joystick
+Run the program and verify:
+- cursor moves with joystick directions
+- pressing joystick selects a cell
+
+### Test 3 — Full Game
+- Use the menu to select PvP or PvC
+- Place moves until win/tie
+- Confirm sound effects play at the correct times
+
+---
+
+## Main Execution Flow (Talk‑Through)
+`main.c`  
+→ initializes drivers (`Display_Init`, `Joystick_Init`, `Buzzer_Init`)  
+→ `GameManager_Init`  
+→ loop: `GameManager_Tick`  
+→ read input: `Joystick_ReadAction`  
+→ update game state: `TTT_ApplyMove` / `AI_ChooseMove`  
+→ render: `UI_RenderGame`  
+→ draw primitives: `Display_FillRect/DrawLine/DrawPixel`
+
+---
+
+## Notes
+- Keep only one display stack in the build (this project uses the `Display_*` primitives).
+- Game logic (`src/game/`) has **no** hardware dependencies by design.
