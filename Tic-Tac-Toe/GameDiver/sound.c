@@ -31,33 +31,80 @@ void buzzer_wait(void)
 
 void buzzer_welcome(void)
 {
-    buzzer_start(30530, 400); buzzer_wait();
-    buzzer_start(24240, 500); buzzer_wait();
-    buzzer_start(20400, 600); buzzer_wait();
-    buzzer_start(15260, 900); buzzer_wait();
+    // Mortal Kombat Theme - The Immortals (1994)
+    buzzer_start(48484, 36); buzzer_wait(); // E4
+    buzzer_start(48484, 36); buzzer_wait(); // E4
+    buzzer_start(48484, 36); buzzer_wait(); // E4
+    buzzer_start(48484, 72); buzzer_wait(); // E4
+    buzzer_start(40816, 43); buzzer_wait(); // G4
+    buzzer_start(48484, 36); buzzer_wait(); // E4
+    buzzer_start(54421, 64); buzzer_wait(); // D4
+
+    buzzer_start(48484, 36); buzzer_wait(); // E4
+    buzzer_start(48484, 36); buzzer_wait(); // E4
+    buzzer_start(48484, 36); buzzer_wait(); // E4
+    buzzer_start(48484, 72); buzzer_wait(); // E4
+    buzzer_start(36363, 291); buzzer_wait(); // A4 (held)
+
+    buzzer_start(48484, 36); buzzer_wait(); // E4
+    buzzer_start(48484, 36); buzzer_wait(); // E4
+    buzzer_start(48484, 36); buzzer_wait(); // E4
+    buzzer_start(48484, 72); buzzer_wait(); // E4
+    buzzer_start(40816, 43); buzzer_wait(); // G4
+    buzzer_start(48484, 36); buzzer_wait(); // E4
+    buzzer_start(54421, 64); buzzer_wait(); // D4
+    buzzer_start(30592, 115); buzzer_wait(); // C5
+    buzzer_start(32388, 108); buzzer_wait(); // B4
+    buzzer_start(36363, 194); buzzer_wait(); // A4
+
+    // Rising power riff
+    buzzer_start(48484, 72); buzzer_wait(); // E4
+    buzzer_start(40816, 86); buzzer_wait(); // G4
+    buzzer_start(36363, 97); buzzer_wait(); // A4
+    buzzer_start(32388, 108); buzzer_wait(); // B4
+    buzzer_start(24279, 290); buzzer_wait(); // E5
+    buzzer_start(27257, 129); buzzer_wait(); // D5
+    buzzer_start(32388, 108); buzzer_wait(); // B4
+
+    buzzer_start(48484, 72); buzzer_wait(); // E4
+    buzzer_start(40816, 86); buzzer_wait(); // G4
+    buzzer_start(36363, 97); buzzer_wait(); // A4
+    buzzer_start(32388, 108); buzzer_wait(); // B4
+    buzzer_start(20408, 345); buzzer_wait(); // G5
+
     buzzer_stop();
 }
 
 void buzzer_win(void)
 {
-    buzzer_start(20408, 200); buzzer_wait();
-    buzzer_start(15267, 200); buzzer_wait();
-    buzzer_start(12121, 400); buzzer_wait();
+    // Victory fanfare - ascending run with held high note
+    buzzer_start(48484, 26); buzzer_wait(); // E4
+    buzzer_start(40816, 31); buzzer_wait(); // G4
+    buzzer_start(36363, 35); buzzer_wait(); // A4
+    buzzer_start(32388, 39); buzzer_wait(); // B4
+    buzzer_start(24279, 105); buzzer_wait(); // E5
+    buzzer_start(24279, 52); buzzer_wait();  // E5
+    buzzer_start(20408, 235); buzzer_wait(); // G5 held
     buzzer_stop();
 }
 
 void buzzer_lose(void)
 {
-    buzzer_start(30534, 200); buzzer_wait();
-    buzzer_start(36364, 200); buzzer_wait();
-    buzzer_start(40000, 400); buzzer_wait();
+    // Sad descending - game over feel
+    buzzer_start(32388, 98); buzzer_wait();  // B4
+    buzzer_start(36363, 88); buzzer_wait();  // A4
+    buzzer_start(40816, 78); buzzer_wait();  // G4
+    buzzer_start(48484, 132); buzzer_wait(); // E4 held
     buzzer_stop();
 }
 
 void buzzer_tie(void)
 {
-    buzzer_start(24242, 150); buzzer_wait();
-    buzzer_start(24242, 150); buzzer_wait();
+    // Price is Right losing horn - wah wah wah wahhh
+    buzzer_start(34334, 69); buzzer_wait();  // Bb4
+    buzzer_start(36363, 66); buzzer_wait();  // A4
+    buzzer_start(38554, 62); buzzer_wait();  // Ab4
+    buzzer_start(40816, 156); buzzer_wait(); // G4 held sad
     buzzer_stop();
 }
 
