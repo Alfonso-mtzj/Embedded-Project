@@ -1,3 +1,8 @@
+// game.c
+// This file controls the game logic.
+// It handles player moves, checks for wins and ties,
+// and runs the game loops for all three game modes.
+
 #include "msp430fr6989.h"
 #include "game.h"
 #include "display.h"
@@ -5,15 +10,24 @@
 #include "sound.h"
 #include "ai.h"
 
+// =====================================================================
+// Board Storage - two boards for dual game mode
+// =====================================================================
 static char boardA[3][3];
 static char boardB[3][3];
 static char turnA, turnB;
 static int curRowA, curColA;
 static int curRowB, curColB;
+static int oldRow, oldCol;   // used to detect cursor movement
 
-volatile int activeBoard  = 1;
-volatile int needsRedraw  = 1;
-volatile int exitToMenu   = 0;
+// shared flags used by the interrupt in main.c
+volatile int activeBoard  = 1;  // 1 = Game A, 2 = Game B
+volatile int needsRedraw  = 1;  // 1 = screen needs to be redrawn
+volatile int exitToMenu   = 0;  // 1 = go back to the main menu
+
+// =====================================================================
+// Helper Functions
+// =====================================================================
 
 static void resetBoard(char board[3][3], char *turn, int *row, int *col)
 {
@@ -75,15 +89,61 @@ static int handleResult(Graphics_Context *ctx, char board[3][3],
     return 0;
 }
 
-static void updateCursor(Graphics_Context *ctx, char board[3][3],
-                          int prevRow, int prevCol, int newRow, int newCol)
+// =====================================================================
+// Screen draw helpers for dual mode
+// =====================================================================
+
+// draws Game A board - only redraws if needsRedraw is set
+static void drawGameAScreen(Graphics_Context *ctx)
 {
-    clearCell(ctx, prevRow, prevCol);
-    redrawCellLines(ctx, prevRow, prevCol);
-    if(board[prevRow][prevCol] == PLAYER_X) drawX(ctx, prevRow, prevCol);
-    if(board[prevRow][prevCol] == PLAYER_O) drawO(ctx, prevRow, prevCol);
-    drawCursor(ctx, newRow, newCol);
+    if(needsRedraw)
+    {
+        drawBoard(ctx);
+        drawMarks(ctx, boardA);
+        drawCursor(ctx, curRowA, curColA);
+        showGameNumber(ctx, 1);
+        showTurn(ctx, turnA);
+        needsRedraw = 0;
+    }
 }
+
+// draws Game B board - only redraws if needsRedraw is set
+static void drawGameBScreen(Graphics_Context *ctx)
+{
+    if(needsRedraw)
+    {
+        drawBoard(ctx);
+        drawMarks(ctx, boardB);
+        drawCursor(ctx, curRowB, curColB);
+        showGameNumber(ctx, 2);
+        showTurn(ctx, turnB);
+        needsRedraw = 0;
+    }
+}
+
+// moves cursor for Game A and sets redraw if it moved
+static void moveGameACursor(void)
+{
+    oldRow = curRowA;
+    oldCol = curColA;
+    movecursor(&curRowA, &curColA);
+    if(oldRow != curRowA || oldCol != curColA)
+        needsRedraw = 1;
+}
+
+// moves cursor for Game B and sets redraw if it moved
+static void moveGameBCursor(void)
+{
+    oldRow = curRowB;
+    oldCol = curColB;
+    movecursor(&curRowB, &curColB);
+    if(oldRow != curRowB || oldCol != curColB)
+        needsRedraw = 1;
+}
+
+// =====================================================================
+// Single Game Modes
+// =====================================================================
 
 void run_pvp(Graphics_Context *ctx)
 {
@@ -112,7 +172,7 @@ void run_pvp(Graphics_Context *ctx)
         prevRow = row; prevCol = col;
         movecursor(&row, &col);
         if(prevRow != row || prevCol != col)
-            updateCursor(ctx, board, prevRow, prevCol, row, col);
+            needsRedraw = 1;
 
         if(readJoystick() == SELECT)
         {
@@ -157,7 +217,7 @@ void run_pvc(Graphics_Context *ctx)
         prevRow = row; prevCol = col;
         movecursor(&row, &col);
         if(prevRow != row || prevCol != col)
-            updateCursor(ctx, board, prevRow, prevCol, row, col);
+            needsRedraw = 1;
 
         if(readJoystick() == SELECT)
         {
@@ -180,6 +240,13 @@ void run_pvc(Graphics_Context *ctx)
     }
 }
 
+// =====================================================================
+// Dual Game Mode
+// Uses the same if/else pattern as friend's code:
+// if activeBoard == 1 run Game A code, else run Game B code
+// S1 interrupt toggles activeBoard and sets needsRedraw
+// =====================================================================
+
 void game_setup(void)
 {
     resetBoard(boardA, &turnA, &curRowA, &curColA);
@@ -189,78 +256,168 @@ void game_setup(void)
     exitToMenu  = 0;
 }
 
-static void drawDualScreen(Graphics_Context *ctx)
+// PvP dual - both boards are player vs player
+void run_dual_pvp(Graphics_Context *ctx)
 {
-    // Select which board to show based on activeBoard
-    char (*board)[3] = (activeBoard == 1) ? boardA : boardB;
-    char   turn      = (activeBoard == 1) ? turnA  : turnB;
-    int    row       = (activeBoard == 1) ? curRowA : curRowB;
-    int    col       = (activeBoard == 1) ? curColA : curColB;
-
-    drawBoard(ctx);
-    drawMarks(ctx, board);
-    drawCursor(ctx, row, col);
-    showGameNumber(ctx, activeBoard);
-    showTurn(ctx, turn);
-    needsRedraw = 0;
-}
-
-static void run_dual(Graphics_Context *ctx, int mode)
-{
-    int prevRow, prevCol, r, c;
-    GameState gs;
     game_setup();
 
     while(!exitToMenu)
     {
-        // needsRedraw is set by S1 interrupt OR after a move
-        if(needsRedraw)
+        if(activeBoard == 1)
         {
-            drawDualScreen(ctx);
-        }
+            // Game A
+            drawGameAScreen(ctx);
+            moveGameACursor();
 
-        char (*board)[3] = (activeBoard == 1) ? boardA : boardB;
-        char  *turn      = (activeBoard == 1) ? &turnA : &turnB;
-        int   *row       = (activeBoard == 1) ? &curRowA : &curRowB;
-        int   *col       = (activeBoard == 1) ? &curColA : &curColB;
-
-        prevRow = *row; prevCol = *col;
-        movecursor(row, col);
-        if(*row != prevRow || *col != prevCol)
-            updateCursor(ctx, board, prevRow, prevCol, *row, *col);
-
-        if(readJoystick() == SELECT)
-        {
-            if(board[*row][*col] == EMPTY)
+            if(readJoystick() == SELECT)
             {
-                int isPC = (mode == 1) || (mode == 2 && activeBoard == 1);
-
-                if(isPC)
+                if(boardA[curRowA][curColA] == EMPTY)
                 {
-                    board[*row][*col] = PLAYER_X;
-                    if(!handleResult(ctx, board, row, col, turn))
-                    {
-                        for(r=0;r<3;r++) for(c=0;c<3;c++) gs.board[r][c]=board[r][c];
-                        gs.currentPlayer = PLAYER_O;
-                        ai_move(&gs);
-                        for(r=0;r<3;r++) for(c=0;c<3;c++) board[r][c]=gs.board[r][c];
-                        handleResult(ctx, board, row, col, turn);
-                    }
+                    boardA[curRowA][curColA] = turnA;
+                    if(!handleResult(ctx, boardA, &curRowA, &curColA, &turnA))
+                        turnA = (turnA == PLAYER_X) ? PLAYER_O : PLAYER_X;
+                    needsRedraw = 1;
                 }
-                else
-                {
-                    board[*row][*col] = *turn;
-                    if(!handleResult(ctx, board, row, col, turn))
-                        *turn = (*turn == PLAYER_X) ? PLAYER_O : PLAYER_X;
-                }
-                needsRedraw = 1;
+                else buzzer_error();
+                checkBoosterS2Release();
             }
-            else buzzer_error();
-            checkBoosterS2Release();
+        }
+        else
+        {
+            // Game B
+            drawGameBScreen(ctx);
+            moveGameBCursor();
+
+            if(readJoystick() == SELECT)
+            {
+                if(boardB[curRowB][curColB] == EMPTY)
+                {
+                    boardB[curRowB][curColB] = turnB;
+                    if(!handleResult(ctx, boardB, &curRowB, &curColB, &turnB))
+                        turnB = (turnB == PLAYER_X) ? PLAYER_O : PLAYER_X;
+                    needsRedraw = 1;
+                }
+                else buzzer_error();
+                checkBoosterS2Release();
+            }
         }
     }
 }
 
-void run_dual_pvp(Graphics_Context *ctx)   { run_dual(ctx, 0); }
-void run_dual_pvc(Graphics_Context *ctx)   { run_dual(ctx, 1); }
-void run_dual_mixed(Graphics_Context *ctx) { run_dual(ctx, 2); }
+// PvC dual - both boards are player vs CPU
+void run_dual_pvc(Graphics_Context *ctx)
+{
+    GameState gs;
+    int r, c;
+    game_setup();
+
+    while(!exitToMenu)
+    {
+        if(activeBoard == 1)
+        {
+            // Game A - player vs CPU
+            drawGameAScreen(ctx);
+            moveGameACursor();
+
+            if(readJoystick() == SELECT)
+            {
+                if(boardA[curRowA][curColA] == EMPTY)
+                {
+                    boardA[curRowA][curColA] = PLAYER_X;
+                    if(!handleResult(ctx, boardA, &curRowA, &curColA, &turnA))
+                    {
+                        for(r=0;r<3;r++) for(c=0;c<3;c++) gs.board[r][c]=boardA[r][c];
+                        gs.currentPlayer = PLAYER_O;
+                        ai_move(&gs);
+                        for(r=0;r<3;r++) for(c=0;c<3;c++) boardA[r][c]=gs.board[r][c];
+                        handleResult(ctx, boardA, &curRowA, &curColA, &turnA);
+                    }
+                    needsRedraw = 1;
+                }
+                else buzzer_error();
+                checkBoosterS2Release();
+            }
+        }
+        else
+        {
+            // Game B - player vs CPU
+            drawGameBScreen(ctx);
+            moveGameBCursor();
+
+            if(readJoystick() == SELECT)
+            {
+                if(boardB[curRowB][curColB] == EMPTY)
+                {
+                    boardB[curRowB][curColB] = PLAYER_X;
+                    if(!handleResult(ctx, boardB, &curRowB, &curColB, &turnB))
+                    {
+                        for(r=0;r<3;r++) for(c=0;c<3;c++) gs.board[r][c]=boardB[r][c];
+                        gs.currentPlayer = PLAYER_O;
+                        ai_move(&gs);
+                        for(r=0;r<3;r++) for(c=0;c<3;c++) boardB[r][c]=gs.board[r][c];
+                        handleResult(ctx, boardB, &curRowB, &curColB, &turnB);
+                    }
+                    needsRedraw = 1;
+                }
+                else buzzer_error();
+                checkBoosterS2Release();
+            }
+        }
+    }
+}
+
+// Mixed dual - Game A is player vs CPU, Game B is player vs player
+void run_dual_mixed(Graphics_Context *ctx)
+{
+    GameState gs;
+    int r, c;
+    game_setup();
+
+    while(!exitToMenu)
+    {
+        if(activeBoard == 1)
+        {
+            // Game A - player vs CPU
+            drawGameAScreen(ctx);
+            moveGameACursor();
+
+            if(readJoystick() == SELECT)
+            {
+                if(boardA[curRowA][curColA] == EMPTY)
+                {
+                    boardA[curRowA][curColA] = PLAYER_X;
+                    if(!handleResult(ctx, boardA, &curRowA, &curColA, &turnA))
+                    {
+                        for(r=0;r<3;r++) for(c=0;c<3;c++) gs.board[r][c]=boardA[r][c];
+                        gs.currentPlayer = PLAYER_O;
+                        ai_move(&gs);
+                        for(r=0;r<3;r++) for(c=0;c<3;c++) boardA[r][c]=gs.board[r][c];
+                        handleResult(ctx, boardA, &curRowA, &curColA, &turnA);
+                    }
+                    needsRedraw = 1;
+                }
+                else buzzer_error();
+                checkBoosterS2Release();
+            }
+        }
+        else
+        {
+            // Game B - player vs player
+            drawGameBScreen(ctx);
+            moveGameBCursor();
+
+            if(readJoystick() == SELECT)
+            {
+                if(boardB[curRowB][curColB] == EMPTY)
+                {
+                    boardB[curRowB][curColB] = turnB;
+                    if(!handleResult(ctx, boardB, &curRowB, &curColB, &turnB))
+                        turnB = (turnB == PLAYER_X) ? PLAYER_O : PLAYER_X;
+                    needsRedraw = 1;
+                }
+                else buzzer_error();
+                checkBoosterS2Release();
+            }
+        }
+    }
+}
