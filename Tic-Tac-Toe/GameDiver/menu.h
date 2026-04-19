@@ -1,18 +1,24 @@
+// menu.h
+// Defines the menu option codes and declares the menu functions.
+
 #ifndef MENU_H
 #define MENU_H
 
 #include "display.h"
 #include "joystick.h"
 
-#define OPT_PVP    0
-#define OPT_PVC    1
-#define OPT_DUAL   2
+// main menu option indices
+#define OPT_PVP    0  // Player vs Player
+#define OPT_PVC    1  // Player vs CPU
+#define OPT_DUAL   2  // Two Games
 
-#define DUAL_PVP   10
-#define DUAL_PVC   11
-#define DUAL_MIXED 12
+// dual game sub-menu return values
+// using 10/11/12 so they don't conflict with the single game values 0/1
+#define DUAL_PVP   10  // both boards player vs player
+#define DUAL_PVC   11  // both boards player vs CPU
+#define DUAL_MIXED 12  // Game A vs CPU, Game B vs Player
 
-int  run_main_menu(Graphics_Context *ctx);
-int  run_dual_menu(Graphics_Context *ctx);
+int run_main_menu(Graphics_Context *ctx);
+int run_dual_menu(Graphics_Context *ctx);
 
 #endif
